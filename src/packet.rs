@@ -1,7 +1,8 @@
 use bit_vec::BitVec;
 const CAPACITY: usize = 512;
 
-struct Packet {
+#[derive(Debug)]
+pub struct Packet {
     buffer: BitVec<u8>,
     pos: u16,
 }
@@ -10,6 +11,12 @@ impl Packet {
     fn new() -> Self {
         Self {
             buffer: BitVec::from_elem_general(CAPACITY, false),
+            pos: 0,
+        }
+    }
+    pub fn new_with_capacity(cap: usize) -> Self {
+        Self {
+            buffer: BitVec::from_elem_general(cap, false),
             pos: 0,
         }
     }
@@ -49,4 +56,7 @@ mod tests {
         });
         assert_eq!(len, 0);
     }
+
+    #[test]
+    fn pack_transition_id_test() {}
 }

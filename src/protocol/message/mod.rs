@@ -1,3 +1,5 @@
+use bit_vec::BitVec;
+
 /*
    +---------------------+
    |        Header       |
@@ -14,3 +16,8 @@
 */
 mod header;
 mod question;
+
+trait Message {
+    fn size() -> usize;
+    fn packet<T>(&self) -> BitVec<T>;
+}
