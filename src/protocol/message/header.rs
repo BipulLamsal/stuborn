@@ -3,7 +3,7 @@ use std::io::Cursor;
 /// i am thinking ths way its easier to get the correct position and also parsing this would be
 /// easier
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum MessageHeaderType {
     /// A 16 bit identifier assigned by the program that
     /// generates any kind of query.  This identifier is copied
@@ -16,18 +16,18 @@ enum MessageHeaderType {
     OpCode(Opcode) = 17,
     /// Authorative Answer : responding name server is an authority for the domain name
     /// in question section (1 bit)
-    AA(u8) = 21,
+    AA(bool) = 21,
 
     /// TrunCation - specifies that this message was truncated
-    TC(u8) = 22,
+    TC(bool) = 22,
     /// attempt to resolve the query recursively if it does not have an answer readily available.
-    RD(u8) = 23,
+    RD(bool) = 23,
     /// whether or not recursive queries are allowed
-    RA(u8) = 24,
+    RA(bool) = 24,
     /// must be zero in all queries and response (3 bits for now) reserved
     Z(u8) = 25,
     /// Response Code : 4 bit field
-    Rcode(ResponseCode) = 26,
+    Rcode(ResponseCode) = 28,
 
     /// Number of entries in question section
     QdCount(u16) = 32,
@@ -66,58 +66,60 @@ impl MessageHeader {
             cursor: Cursor::new([0u8; 12]),
         }
     }
-    fn add(&mut self, header_type: MessageHeaderType) -> &mut Self {
-        let pos: usize = header_type.into() / 8;
-        let rem: usize = header_type.into() % 8;
-        let cursor = self.cursor.get_mut();
-        match header_type {
-            MessageHeaderType::Id(value)
-            | MessageHeaderType::QdCount(value)
-            | MessageHeaderType::AnCount(value)
-            | MessageHeaderType::NsCount(value)
-            | MessageHeaderType::ArCount(value) => {
-                /*
-                let first = value >> 8;
-                let second = value & 0xFF;
-                // first byte goes first in be bytes
-                idk[pos] = first as u8;
-                idk[pos + 1] = second as u8;
-                */
 
-                let be_bytes: [u8; 2] = value.to_be_bytes();
+    /// Internal helper to set or clear a single bit at a specific position
+    fn set_flag(&mut self, pos: usize, rem: usize, value: bool) {
+        let buf = self.cursor.get_mut();
+        let mask = 1 << (7 - rem);
+        if value {
+            buf[pos] |= mask;
+        } else {
+            buf[pos] &= !mask;
+        }
+    }
+    pub fn add(&mut self, header_type: MessageHeaderType) -> &mut Self {
+        let bit_idx: usize = header_type.into();
+        let pos = bit_idx / 8;
+        let rem = bit_idx % 8;
+        let cursor = self.cursor.get_mut();
+
+        match header_type {
+            MessageHeaderType::Id(v)
+            | MessageHeaderType::QdCount(v)
+            | MessageHeaderType::AnCount(v)
+            | MessageHeaderType::NsCount(v)
+            | MessageHeaderType::ArCount(v) => {
+                let be_bytes = v.to_be_bytes();
                 cursor[pos] = be_bytes[0];
                 cursor[pos + 1] = be_bytes[1];
-                self
             }
-            MessageHeaderType::Qr(value) => {
-                if value {
-                    cursor[pos] = (1 >> 7) as u8;
-                } else {
-                    cursor[pos] = (0 >> 7) as u8;
-                }
-                self
+
+            MessageHeaderType::Qr(v) => self.set_flag(pos, rem, v),
+            MessageHeaderType::AA(v) => self.set_flag(pos, rem, v),
+            MessageHeaderType::TC(v) => self.set_flag(pos, rem, v),
+            MessageHeaderType::RD(v) => self.set_flag(pos, rem, v),
+            MessageHeaderType::RA(v) => self.set_flag(pos, rem, v),
+
+            MessageHeaderType::OpCode(v) => {
+                // technically its 3 : 4-rem
+                cursor[pos] |= (v as u8) << (4 - rem);
             }
-            MessageHeaderType::OpCode(value) => {
-                let opcode = value as u8;
-                cursor[pos] = cursor[pos] | (opcode >> 4);
-                self
+            MessageHeaderType::Z(v) => {
+                // the approach here is quite simple
+                // z is typically 0 we could hardcode it but
+                // we only need the 3 bit and we shift by 4 leaving the first bit as it is
+                cursor[pos] |= (v & 0x07) << 4;
             }
-            MessageHeaderType::AA(value) => {}
-            MessageHeaderType::TC(value) => {}
-            MessageHeaderType::RD(value) => {}
-            MessageHeaderType::RA(value) => {}
-            MessageHeaderType::Z(value) => {}
-            MessageHeaderType::Rcode(value) => {}
-            MessageHeaderType::QdCount(value) => {}
-            MessageHeaderType::AnCount(value) => {}
-            MessageHeaderType::NsCount(value) => {}
-            MessageHeaderType::ArCount(value) => {}
+            MessageHeaderType::Rcode(v) => {
+                cursor[pos] |= (v as u8) & 0x0F;
+            }
         }
+        self
     }
 }
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum Opcode {
     Query = 0,
     InverseQuery = 1,
@@ -125,7 +127,7 @@ enum Opcode {
 }
 
 #[repr(u8)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum ResponseCode {
     /// No Error Condition
     NoErr = 0,
@@ -146,7 +148,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn header() {
-        let packet = MessageHeader::builder().add(header_type);
+    fn test_protocol_header_generation() {
+        let mut header = MessageHeader::builder();
+        header
+            .add(MessageHeaderType::Id(0x1234))
+            .add(MessageHeaderType::Qr(true))
+            .add(MessageHeaderType::OpCode(Opcode::Query))
+            .add(MessageHeaderType::QdCount(1));
+
+        let result = header.cursor.into_inner();
+
+        assert_eq!(result[0], 0x12);
+        assert_eq!(result[1], 0x34);
+        assert_eq!(result[2], 0x80);
+        assert_eq!(result[4], 0x00);
+        assert_eq!(result[5], 0x01);
     }
 }
