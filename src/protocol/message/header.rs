@@ -18,7 +18,7 @@ enum MessageHeader {
     TC(u8),
     /// set in query and copied in the response, purse the query recursively
     RD(u8),
-    /// must be zero in all queries and response
+    /// must be zero in all queries and response (3 bits for now) reserved
     Z(u8),
     /// Response Code : 4 bit field
     Rcode(ResponseCode),

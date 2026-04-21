@@ -16,8 +16,9 @@ use crate::protocol::rr::RRType;
 
 /// carry the "question" in most queries,
 /// contains QDCOUNT (usually 1) entries,
-enum Question {
-    Qname(String), // this can be of variable size
-    Type(RRType),
-    Class(RRClass),
+struct Question {
+    // this can be of variable size a domain name represented as a sequence of labels, where each label consists of a length octet followed by that number of octets.
+    qname: String,
+    q_type: RRType,
+    class: RRClass,
 }
