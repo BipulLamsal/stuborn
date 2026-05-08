@@ -60,7 +60,7 @@ struct MessageHeader {
 }
 
 impl MessageHeader {
-    fn builder() -> Self {
+    fn new() -> Self {
         Self {
             // in total we have 12 * 8 = 96 bits
             cursor: Cursor::new([0u8; 12]),
@@ -89,6 +89,7 @@ impl MessageHeader {
             | MessageHeaderType::AnCount(v)
             | MessageHeaderType::NsCount(v)
             | MessageHeaderType::ArCount(v) => {
+                // since they are u16 and divided into two different parts
                 let be_bytes = v.to_be_bytes();
                 cursor[pos] = be_bytes[0];
                 cursor[pos + 1] = be_bytes[1];
@@ -115,6 +116,61 @@ impl MessageHeader {
             }
         }
         self
+    }
+    /// Internal function to get the u16 value at byte offset `start`
+    fn get_u16_value(&self, start: usize) -> u16 {
+        let slice = self.cursor.get_ref();
+        u16::from_be_bytes([slice[start], slice[start + 1]])
+    }
+
+    /// Internal function to get a single bit value at byte offset `start`, bit remainder `rem`
+    fn get_bool_value(&self, start: usize, rem: usize) -> bool {
+        let slice = self.cursor.get_ref();
+        // shift right so the target bit is at position 0, then mask it
+        (slice[start] >> (7 - rem)) & 1 == 1
+    }
+
+    fn get_message_header_value(&self, message_type: &mut MessageHeaderType) {
+        let bit_idx: usize = (*message_type).into();
+        let pos = bit_idx / 8;
+        let rem = bit_idx % 8;
+
+        match message_type {
+            MessageHeaderType::Id(v)
+            | MessageHeaderType::QdCount(v)
+            | MessageHeaderType::AnCount(v)
+            | MessageHeaderType::NsCount(v)
+            | MessageHeaderType::ArCount(v) => {
+                *v = self.get_u16_value(pos);
+            }
+
+            MessageHeaderType::Qr(v)
+            | MessageHeaderType::AA(v)
+            | MessageHeaderType::TC(v)
+            | MessageHeaderType::RD(v)
+            | MessageHeaderType::RA(v) => {
+                *v = self.get_bool_value(pos, rem);
+            }
+
+            MessageHeaderType::OpCode(v) => {
+                let slice = self.cursor.get_ref();
+                let raw = slice[pos] >> 3 & 0x0F;
+                // SAFETY: OpCode variants map directly to their u8 discriminants
+                *v = unsafe { std::mem::transmute(raw) };
+            }
+
+            MessageHeaderType::Z(v) => {
+                let slice = self.cursor.get_ref();
+                *v = (slice[pos] >> 4) & 0x07;
+            }
+
+            MessageHeaderType::Rcode(v) => {
+                let slice = self.cursor.get_ref();
+                let raw = slice[pos] & 0x0F;
+                // SAFETY: ResponseCode variants map directly to their u8 discriminants
+                *v = unsafe { std::mem::transmute(raw) };
+            }
+        }
     }
 }
 
@@ -147,9 +203,20 @@ enum ResponseCode {
 mod tests {
     use super::*;
 
+    /// this is random test because i always forget the be and le
+    #[test]
+    fn test_protocol_u16_be_bytes_test() {
+        let value: u16 = 0x1234;
+        //00000000 00001010
+        let be_bytes = value.to_be_bytes();
+
+        assert_eq!(be_bytes[0], 0x12);
+        assert_eq!(be_bytes[1], 0x34);
+    }
+
     #[test]
     fn test_protocol_header_generation() {
-        let mut header = MessageHeader::builder();
+        let mut header = MessageHeader::new();
         header
             .add(MessageHeaderType::Id(0x1234))
             .add(MessageHeaderType::Qr(true))
@@ -163,5 +230,73 @@ mod tests {
         assert_eq!(result[2], 0x80);
         assert_eq!(result[4], 0x00);
         assert_eq!(result[5], 0x01);
+    }
+
+    #[test]
+    fn test_protocol_header_id_retrieval() {
+        let mut header = MessageHeader::new();
+        header
+            .add(MessageHeaderType::Id(0x1234))
+            .add(MessageHeaderType::Qr(true))
+            .add(MessageHeaderType::OpCode(Opcode::Query))
+            .add(MessageHeaderType::QdCount(1));
+
+        let mut id = MessageHeaderType::Id(0);
+        header.get_message_header_value(&mut id);
+
+        match id {
+            MessageHeaderType::Id(v) => {
+                assert_eq!(v, 0x1234);
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_protocol_header_qr_retrieval() {
+        let mut header = MessageHeader::new();
+        header.add(MessageHeaderType::Qr(true));
+        let mut qr = MessageHeaderType::Qr(false);
+        header.get_message_header_value(&mut qr);
+        match qr {
+            MessageHeaderType::Qr(v) => assert_eq!(v, true),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_protocol_header_aa_retrieval() {
+        let mut header = MessageHeader::new();
+        header.add(MessageHeaderType::AA(true));
+        let mut aa = MessageHeaderType::AA(false);
+        header.get_message_header_value(&mut aa);
+        match aa {
+            MessageHeaderType::AA(v) => assert_eq!(v, true),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_protocol_header_tc_retrieval() {
+        let mut header = MessageHeader::new();
+        header.add(MessageHeaderType::TC(true));
+        let mut tc = MessageHeaderType::TC(false);
+        header.get_message_header_value(&mut tc);
+        match tc {
+            MessageHeaderType::TC(v) => assert_eq!(v, true),
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn test_protocol_header_opcode_retrieval() {
+        let mut header = MessageHeader::new();
+        header.add(MessageHeaderType::OpCode(Opcode::Status));
+        let mut opcode = MessageHeaderType::OpCode(Opcode::Query);
+        header.get_message_header_value(&mut opcode);
+        match opcode {
+            MessageHeaderType::OpCode(v) => assert_eq!(v as u8, Opcode::Status as u8),
+            _ => {}
+        }
     }
 }
