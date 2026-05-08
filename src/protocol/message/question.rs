@@ -44,10 +44,15 @@ impl Question {
         self.class = q_class;
     }
     fn to_buffer(&self) -> Vec<u8> {
-        self.qname.out()
+        let mut buffer = self.qname.out();
+        let q_type = self.q_type as u16; // 2 bytes 
+        let q_class = self.class as u16; // 2 bytes
+
+        buffer.extend_from_slice(&q_type.to_be_bytes());
+        buffer.extend_from_slice(&q_class.to_be_bytes());
+        buffer
     }
 }
-
 #[derive(Default)]
 struct Labels {
     counter: Vec<u8>,
@@ -89,5 +94,7 @@ mod tests {
         let result = question.to_buffer();
         // validation
         assert_eq!(result[0], 3);
+        assert_eq!(result[6], 1);
+        assert_eq!(result[8], 1);
     }
 }

@@ -17,6 +17,7 @@ struct RR_Format {
 // Qtype appears in the question part of a query
 // Qtype are a superset of RRType, hence all RRTypes are valid Qtypes.
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum Qtype {
     Other(RRType),
     AXFR = 252,
@@ -26,6 +27,7 @@ pub enum Qtype {
 
 /// TYPE fields are used in resource records, they are sub field of the Qtype
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum RRType {
     /// a host address
     A = 1,
@@ -43,6 +45,7 @@ pub enum RRType {
 
 /// CLASS fields appear in resource records.
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum RRClass {
     /// The internet (mostly used)
     IN = 1,
