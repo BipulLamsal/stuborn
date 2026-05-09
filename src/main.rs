@@ -21,9 +21,18 @@ fn main() {
     let mut req = Vec::from(header_buffer);
     req.extend(question_buffer);
 
-    let ret = socket.send_to(&req, server);
+    socket.connect(server).expect("connect function failed");
+
+    let ret = socket.send(&req);
 
     if let Ok(bytes) = ret {
-        println!("no of bytes received: {}", bytes);
+        println!("no of bytes sent: {}", bytes);
+        let mut buf = [0; 512];
+
+        let recv = socket.recv(&mut buf);
+
+        if let Ok(r) = recv {
+            println!("no of bytes received : {:?}", r);
+        }
     }
 }
