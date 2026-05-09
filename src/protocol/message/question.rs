@@ -16,7 +16,7 @@ use crate::protocol::rr::RRType;
 
 /// carry the "question" in most queries,
 /// contains QDCOUNT (usually 1) entries,
-struct Question {
+pub struct Question {
     // this can be of variable size a domain name represented as a sequence of labels, where each label consists of a length octet followed by that number of octets.
     qname: Labels,
     q_type: RRType,
@@ -34,16 +34,16 @@ impl Default for Question {
 }
 
 impl Question {
-    fn add_name(&mut self, name: String) {
+    pub fn add_name(&mut self, name: String) {
         self.qname.add_name(name);
     }
-    fn set_type(&mut self, q_type: RRType) {
+    pub fn set_type(&mut self, q_type: RRType) {
         self.q_type = q_type;
     }
-    fn set_class(&mut self, q_class: RRClass) {
+    pub fn set_class(&mut self, q_class: RRClass) {
         self.class = q_class;
     }
-    fn to_buffer(&self) -> Vec<u8> {
+    pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = self.qname.out();
         let q_type = self.q_type as u16; // 2 bytes 
         let q_class = self.class as u16; // 2 bytes

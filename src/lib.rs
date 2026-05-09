@@ -1,2 +1,2 @@
 mod packet;
-mod protocol;
+pub mod protocol;

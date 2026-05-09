@@ -4,7 +4,7 @@ use std::io::Cursor;
 /// easier
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
-enum MessageHeaderType {
+pub enum MessageHeaderType {
     /// A 16 bit identifier assigned by the program that
     /// generates any kind of query.  This identifier is copied
     /// the corresponding reply and can be used by the requester
@@ -54,19 +54,12 @@ impl From<MessageHeaderType> for usize {
     }
 }
 
-#[derive(Debug)]
-struct MessageHeader {
+#[derive(Debug, Default)]
+pub struct MessageHeader {
     cursor: Cursor<[u8; 12]>,
 }
 
 impl MessageHeader {
-    fn new() -> Self {
-        Self {
-            // in total we have 12 * 8 = 96 bits
-            cursor: Cursor::new([0u8; 12]),
-        }
-    }
-
     /// Internal helper to set or clear a single bit at a specific position
     fn set_flag(&mut self, pos: usize, rem: usize, value: bool) {
         let buf = self.cursor.get_mut();
@@ -77,6 +70,11 @@ impl MessageHeader {
             buf[pos] &= !mask;
         }
     }
+
+    pub fn to_buffer(&self) -> &[u8] {
+        self.cursor.get_ref()
+    }
+
     pub fn add(&mut self, header_type: MessageHeaderType) -> &mut Self {
         let bit_idx: usize = header_type.into();
         let pos = bit_idx / 8;
