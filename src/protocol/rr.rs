@@ -1,5 +1,5 @@
 // Resolve Record
-struct RR_Format {
+pub struct RR_Format {
     /// Owner Name; name of the node to which record persists
     name: u16,
     /// 2 bytes of data containing one of the RR type codes
@@ -11,7 +11,7 @@ struct RR_Format {
     /// length
     rdlen: u16,
     ///  variable length string that describes the resource
-    rdata: u16,
+    rdata: String,
 }
 
 // Qtype appears in the question part of a query
@@ -27,7 +27,7 @@ pub enum Qtype {
 
 /// TYPE fields are used in resource records, they are sub field of the Qtype
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RRType {
     /// a host address
     A = 1,
@@ -43,9 +43,24 @@ pub enum RRType {
     TXT = 16,
 }
 
+impl TryFrom<u16> for RRType {
+    type Error = u16;
+    fn try_from(v: u16) -> Result<Self, Self::Error> {
+        match v {
+            1 => Ok(Self::A),
+            2 => Ok(Self::NS),
+            5 => Ok(Self::CNAME),
+            6 => Ok(Self::SOA),
+            12 => Ok(Self::PTR),
+            16 => Ok(Self::TXT),
+            _ => Err(v),
+        }
+    }
+}
+
 /// CLASS fields appear in resource records.
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RRClass {
     /// The internet (mostly used)
     IN = 1,
@@ -55,4 +70,17 @@ pub enum RRClass {
     HS = 4,
     /// QCLASS fields appear in the question section of a query.
     ALL = 255,
+}
+
+impl TryFrom<u16> for RRClass {
+    type Error = u16;
+    fn try_from(v: u16) -> Result<Self, Self::Error> {
+        match v {
+            1 => Ok(Self::IN),
+            3 => Ok(Self::CH),
+            4 => Ok(Self::HS),
+            255 => Ok(Self::ALL),
+            _ => Err(v),
+        }
+    }
 }

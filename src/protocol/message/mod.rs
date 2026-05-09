@@ -1,5 +1,10 @@
 use bit_vec::BitVec;
 
+use crate::protocol::{
+    message::{header::MessageHeader, question::Question},
+    rr::RR_Format,
+};
+
 /*
    +---------------------+
    |        Header       |
@@ -14,11 +19,22 @@ use bit_vec::BitVec;
    +---------------------+
 
 */
-mod answer;
+
+pub mod answer;
 pub mod header;
 pub mod question;
 
-trait Message {
-    fn size() -> usize;
-    fn packet<T>(&self) -> BitVec<T>;
+trait Packet {
+    fn from_buffer(&self, buffer: [u8]) -> Self;
+    fn to_buffer(&self) -> [u8];
 }
+
+struct DNSpacket {
+    header: MessageHeader,
+    question: Question,
+    answer: RR_Format,
+    authority: RR_Format,
+    additional: RR_Format,
+}
+
+impl DNSpacket {}

@@ -71,6 +71,12 @@ impl MessageHeader {
         }
     }
 
+    /// This is essential if some known buffer is passed in (eg: response)
+    /// and extracted via get_message_header_value()
+    pub fn from(&mut self, buffer: [u8; 12]) {
+        *(self.cursor.get_mut()) = buffer;
+    }
+
     pub fn to_buffer(&self) -> &[u8] {
         self.cursor.get_ref()
     }
@@ -214,7 +220,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_generation() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header
             .add(MessageHeaderType::Id(0x1234))
             .add(MessageHeaderType::Qr(true))
@@ -232,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_id_retrieval() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header
             .add(MessageHeaderType::Id(0x1234))
             .add(MessageHeaderType::Qr(true))
@@ -252,7 +258,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_qr_retrieval() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header.add(MessageHeaderType::Qr(true));
         let mut qr = MessageHeaderType::Qr(false);
         header.get_message_header_value(&mut qr);
@@ -264,7 +270,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_aa_retrieval() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header.add(MessageHeaderType::AA(true));
         let mut aa = MessageHeaderType::AA(false);
         header.get_message_header_value(&mut aa);
@@ -276,7 +282,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_tc_retrieval() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header.add(MessageHeaderType::TC(true));
         let mut tc = MessageHeaderType::TC(false);
         header.get_message_header_value(&mut tc);
@@ -288,7 +294,7 @@ mod tests {
 
     #[test]
     fn test_protocol_header_opcode_retrieval() {
-        let mut header = MessageHeader::new();
+        let mut header = MessageHeader::default();
         header.add(MessageHeaderType::OpCode(Opcode::Status));
         let mut opcode = MessageHeaderType::OpCode(Opcode::Query);
         header.get_message_header_value(&mut opcode);
