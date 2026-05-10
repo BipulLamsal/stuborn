@@ -1,8 +1,6 @@
-use bit_vec::BitVec;
-
 use crate::protocol::{
     message::{header::MessageHeader, question::Question},
-    rr::RR_Format,
+    rr::RRFormat,
 };
 
 /*
@@ -32,9 +30,9 @@ trait Packet {
 struct DNSpacket {
     header: MessageHeader,
     question: Question,
-    answer: RR_Format,
-    authority: RR_Format,
-    additional: RR_Format,
+    answer: RRFormat,
+    authority: RRFormat,
+    additional: RRFormat,
 }
 
 impl DNSpacket {}

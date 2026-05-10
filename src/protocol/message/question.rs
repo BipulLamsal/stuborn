@@ -1,3 +1,4 @@
+use crate::protocol::rr::Labels;
 use crate::protocol::rr::RRClass;
 use crate::protocol::rr::RRType;
 /*                                 1  1  1  1  1  1
@@ -51,7 +52,7 @@ impl Question {
 
     pub fn add_name(&mut self, name: String) {
         self.qname.add_name(name);
-        if self.qname.counter.len() > self.num_questions as usize {
+        if self.qname.get_len() > self.num_questions as usize {
             self.num_questions += 1;
         }
     }
@@ -72,19 +73,10 @@ impl Question {
     }
 
     /// Should be called after constructing with `new(num)` where `num` is the number of questions.
-    pub fn from_buffer(&mut self, buffer: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        let mut labels = Labels::default();
-        let mut start = 0_usize;
+    pub fn from_buffer(&mut self, buffer: &[u8]) {
+        let (label, mut start) = Labels::from_buffer(&buffer, self.num_questions);
 
-        for _ in 0..self.num_questions {
-            let num = buffer[start] as usize;
-            let slice = &buffer[start + 1..start + 1 + num];
-            let string_value = str::from_utf8(slice)?;
-            labels.add_name(string_value.to_string());
-            start += num + 1;
-        }
-        self.qname = labels;
-
+        self.qname = label;
         start += 1; // null terminator
 
         let rr_type = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
@@ -93,31 +85,6 @@ impl Question {
         // instead of transmute lets use try from fresh fresh implemenation
         self.q_type = RRType::try_from(rr_type).expect("Unknown RR type: {rr_type}");
         self.class = RRClass::try_from(class).expect("Unknown class: {class}");
-
-        Ok(())
-    }
-}
-#[derive(Default, Debug, PartialEq)]
-struct Labels {
-    counter: Vec<u8>,
-    label: Vec<String>,
-}
-
-impl Labels {
-    fn add_name(&mut self, name: String) {
-        self.counter.push(name.len() as u8);
-        self.label.push(name);
-    }
-
-    fn out(&self) -> Vec<u8> {
-        let mut out = Vec::new();
-        for (c, l) in self.counter.iter().zip(self.label.iter()) {
-            out.push(*c as u8);
-            out.extend_from_slice(l.as_bytes());
-        }
-        // termination
-        out.push(0);
-        out
     }
 }
 
@@ -126,7 +93,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_question_label_encode_with_counter() {
+    fn test_question_encode_with_counter() {
         // setup
         let strings = ["www"];
         let mut question = Question::default();
@@ -156,7 +123,7 @@ mod tests {
 
         // verification
         let mut decoded = Question::new(question.get_num());
-        decoded.from_buffer(&result).unwrap();
+        decoded.from_buffer(&result);
 
         assert_eq!(question, decoded);
     }
