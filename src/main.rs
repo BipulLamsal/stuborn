@@ -1,6 +1,7 @@
 use std::net::UdpSocket;
 
 use stubborn::protocol::message::{
+    DNSpacket,
     header::{MessageHeader, MessageHeaderType},
     question::Question,
 };
@@ -15,7 +16,8 @@ fn main() {
     let header_buffer = header.to_buffer();
 
     let mut question = Question::default();
-    question.add_name(String::from("google.com"));
+    question.add_name(String::from("google"));
+    question.add_name(String::from("com"));
     let question_buffer = question.to_buffer();
 
     let mut req = Vec::from(header_buffer);
@@ -34,5 +36,8 @@ fn main() {
         if let Ok(r) = recv {
             println!("no of bytes received : {:?}", r);
         }
+
+        let packet = DNSpacket::from_buffer(&buf);
+        println!("{:#?}", packet);
     }
 }

@@ -1,6 +1,6 @@
-// Resolve Record
+// A single Resource Record
 #[derive(Debug, PartialEq)]
-pub struct RRFormat {
+pub struct RRRecord {
     /// Owner Name; name of the node to which record persists
     name: Labels,
     /// 2 bytes of data containing one of the RR type codes
@@ -13,12 +13,9 @@ pub struct RRFormat {
     rdlen: u16,
     ///  variable length string that describes the resource
     rdata: String,
-
-    // just to impl the from_buffer trait
-    num_answers: u8,
 }
 
-impl Default for RRFormat {
+impl Default for RRRecord {
     fn default() -> Self {
         Self {
             name: Labels::default(),
@@ -27,67 +24,90 @@ impl Default for RRFormat {
             ttl: 0,
             rdlen: 0,
             rdata: String::new(),
-            num_answers: 0,
         }
     }
 }
 
-impl RRFormat {
-    pub fn new(num: u8) -> Self {
-        let mut value = Self::default();
-        value.num_answers = num;
-        return value;
-    }
+impl RRRecord {
+    pub fn from_buffer(buffer: &[u8]) -> (Self, usize) {
+        let (labels, mut pos) = Labels::from_buffer(buffer);
 
-    fn to_buffer(&self) -> Vec<u8> {
-        let name_slice = self.name.out();
-        let rr_type_slice = (self.rr_type as u16).to_be_bytes();
-        let rr_class_slice = (self.rr_class as u16).to_be_bytes();
-        let ttl_slice = self.ttl.to_be_bytes();
-        let rdlen_slice = self.rdlen.to_be_bytes();
-        let rdata_slice = self.rdata.as_bytes();
-        let mut vec = Vec::new();
-
-        vec.extend_from_slice(&name_slice);
-        vec.extend_from_slice(&rr_type_slice);
-        vec.extend_from_slice(&rr_class_slice);
-        vec.extend_from_slice(&ttl_slice);
-        vec.extend_from_slice(&rdlen_slice);
-        vec.extend_from_slice(rdata_slice);
-
-        return vec;
-    }
-    fn from_buffer(&mut self, buffer: &[u8]) {
-        let (labels, mut start) = Labels::from_buffer(buffer, self.num_answers);
-        start += 1;
-
-        let rr_type = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
+        let rr_type = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
         let rr_type = RRType::try_from(rr_type).unwrap();
-        start += 2;
+        pos += 2;
 
-        let rr_class = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
+        let rr_class = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
         let rr_class = RRClass::try_from(rr_class).unwrap();
-        start += 2;
+        pos += 2;
 
         let ttl = u32::from_be_bytes([
-            buffer[start],
-            buffer[start + 1],
-            buffer[start + 2],
-            buffer[start + 3],
+            buffer[pos],
+            buffer[pos + 1],
+            buffer[pos + 2],
+            buffer[pos + 3],
         ]);
-        start += 4;
+        pos += 4;
 
-        let rdlen = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
-        start += 2;
+        let rdlen = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
+        pos += 2;
 
-        let rdata = String::from_utf8(buffer[start..start + rdlen as usize].to_vec()).unwrap();
+        let rdata = String::from_utf8_lossy(&buffer[pos..pos + rdlen as usize]).to_string();
+        pos += rdlen as usize;
 
-        self.name = labels;
-        self.rr_type = rr_type;
-        self.rr_class = rr_class;
-        self.ttl = ttl;
-        self.rdlen = rdlen;
-        self.rdata = rdata;
+        (
+            Self {
+                name: labels,
+                rr_type,
+                rr_class,
+                ttl,
+                rdlen,
+                rdata,
+            },
+            pos,
+        )
+    }
+
+    pub fn to_buffer(&self) -> Vec<u8> {
+        let mut vec = Vec::new();
+        vec.extend_from_slice(&self.name.out());
+        vec.extend_from_slice(&(self.rr_type as u16).to_be_bytes());
+        vec.extend_from_slice(&(self.rr_class as u16).to_be_bytes());
+        vec.extend_from_slice(&self.ttl.to_be_bytes());
+        vec.extend_from_slice(&self.rdlen.to_be_bytes());
+        vec.extend_from_slice(self.rdata.as_bytes());
+        vec
+    }
+}
+
+/// RRFormat holds multiple RRRecords for a given section (answer/authority/additional)
+#[derive(Debug, Default)]
+pub struct RRFormat {
+    pub records: Vec<RRRecord>,
+}
+
+impl RRFormat {
+    pub fn new(num: u16) -> Self {
+        Self {
+            records: Vec::with_capacity(num as usize),
+        }
+    }
+
+    pub fn from_buffer(&mut self, buffer: &[u8]) -> usize {
+        let mut pos = 0;
+        for _ in 0..self.records.capacity() {
+            let (record, next) = RRRecord::from_buffer(&buffer[pos..]);
+            self.records.push(record);
+            pos += next;
+        }
+        pos
+    }
+
+    pub fn to_buffer(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        for record in &self.records {
+            out.extend_from_slice(&record.to_buffer());
+        }
+        out
     }
 }
 
@@ -118,6 +138,7 @@ pub enum RRType {
     PTR = 12,
     /// text strings
     TXT = 16,
+    AAAA = 28,
 }
 
 impl TryFrom<u16> for RRType {
@@ -130,6 +151,7 @@ impl TryFrom<u16> for RRType {
             6 => Ok(Self::SOA),
             12 => Ok(Self::PTR),
             16 => Ok(Self::TXT),
+            28 => Ok(Self::AAAA),
             _ => Err(v),
         }
     }
@@ -187,16 +209,27 @@ impl Labels {
         self.label.len()
     }
 
-    pub fn from_buffer(buffer: &[u8], iter_len: u8) -> (Self, usize) {
+    pub fn from_buffer(buffer: &[u8]) -> (Self, usize) {
         let mut labels = Labels::default();
         let mut start = 0_usize;
 
-        for _ in 0..iter_len {
-            let num = buffer[start] as usize;
-            let slice = &buffer[start + 1..start + 1 + num];
+        loop {
+            let num = buffer[start];
+
+            if num == 0 {
+                start += 1;
+                break;
+            }
+
+            if num & 0xC0 == 0xC0 {
+                start += 2;
+                break;
+            }
+
+            let slice = &buffer[start + 1..start + 1 + num as usize];
             let string_value = str::from_utf8(slice).expect("Expected Str in the byte");
             labels.add_name(string_value.to_string());
-            start += num + 1;
+            start += num as usize + 1;
         }
 
         (labels, start)
@@ -207,26 +240,33 @@ impl Labels {
 mod tests {
     use super::*;
 
-    fn make_rr() -> RRFormat {
+    fn make_rr_record() -> RRRecord {
         let mut name = Labels::default();
         name.add_name("www".to_string());
         name.add_name("google".to_string());
         name.add_name("com".to_string());
 
-        RRFormat {
+        RRRecord {
             name,
             rr_type: RRType::A,
             rr_class: RRClass::IN,
             ttl: 300,
             rdlen: 9,
             rdata: "127.0.0.1".to_string(),
-            num_answers: 3,
         }
+    }
+
+    fn make_rr_format(num: u16) -> RRFormat {
+        let mut fmt = RRFormat::new(num);
+        for _ in 0..num {
+            fmt.records.push(make_rr_record());
+        }
+        fmt
     }
 
     #[test]
     fn test_resolve_record_encode() {
-        let rr = make_rr();
+        let rr = make_rr_record();
         let buffer = rr.to_buffer();
 
         assert_eq!(buffer[0], 3);
@@ -236,7 +276,6 @@ mod tests {
         assert_eq!(buffer[11], 3);
         assert_eq!(&buffer[12..15], b"com");
         assert_eq!(buffer[15], 0); // null terminator
-
         // rr_type: A = 1
         assert_eq!(&buffer[16..18], &[0, 1]);
         // rr_class: IN = 1
@@ -251,13 +290,33 @@ mod tests {
 
     #[test]
     fn test_resolve_record_decode() {
-        let original = make_rr();
+        let original = make_rr_record();
         let buffer = original.to_buffer();
 
-        // expectation of num of answer is 3
-        let mut decoded = RRFormat::new(3);
-        decoded.from_buffer(&buffer);
+        let (decoded, _) = RRRecord::from_buffer(&buffer);
 
         assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn test_rr_format_multiple_records() {
+        let original = make_rr_format(2);
+        let buffer = original.to_buffer();
+
+        let mut decoded = RRFormat::new(2);
+        decoded.from_buffer(&buffer);
+
+        assert_eq!(decoded.records.len(), 2);
+        assert_eq!(decoded.records[0], original.records[0]);
+        assert_eq!(decoded.records[1], original.records[1]);
+    }
+
+    #[test]
+    fn test_labels_pointer_compression_skipped() {
+        // pointer bytes 0xC0 0x0C should consume exactly 2 bytes and stop
+        let buffer: &[u8] = &[0xC0, 0x0C, 0x00, 0x01];
+        let (labels, consumed) = Labels::from_buffer(buffer);
+        assert_eq!(consumed, 2);
+        assert_eq!(labels.get_len(), 0); // no labels parsed, just pointer
     }
 }

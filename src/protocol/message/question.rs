@@ -23,9 +23,6 @@ pub struct Question {
     qname: Labels,
     q_type: RRType,
     class: RRClass,
-
-    // just to impl the from_buffer trait
-    num_questions: u8,
 }
 
 impl Default for Question {
@@ -34,57 +31,46 @@ impl Default for Question {
             qname: Labels::default(),
             q_type: RRType::A,
             class: RRClass::IN,
-            num_questions: 0,
         }
     }
 }
 
 impl Question {
-    pub fn new(num: u8) -> Self {
-        let mut value = Question::default();
-        value.num_questions = num;
-        return value;
-    }
-
-    pub fn get_num(&self) -> u8 {
-        self.num_questions
+    pub fn new(_num: u16) -> Self {
+        Self::default()
     }
 
     pub fn add_name(&mut self, name: String) {
         self.qname.add_name(name);
-        if self.qname.get_len() > self.num_questions as usize {
-            self.num_questions += 1;
-        }
     }
+
     pub fn set_type(&mut self, q_type: RRType) {
         self.q_type = q_type;
     }
+
     pub fn set_class(&mut self, q_class: RRClass) {
         self.class = q_class;
     }
+
     pub fn to_buffer(&self) -> Vec<u8> {
         let mut buffer = self.qname.out();
-        let q_type = self.q_type as u16; // 2 bytes 
+        let q_type = self.q_type as u16; // 2 bytes
         let q_class = self.class as u16; // 2 bytes
-
         buffer.extend_from_slice(&q_type.to_be_bytes());
         buffer.extend_from_slice(&q_class.to_be_bytes());
         buffer
     }
 
-    /// Should be called after constructing with `new(num)` where `num` is the number of questions.
-    pub fn from_buffer(&mut self, buffer: &[u8]) {
-        let (label, mut start) = Labels::from_buffer(&buffer, self.num_questions);
-
+    /// Returns the position after to the next item to start consuming the buffer
+    pub fn from_buffer(&mut self, buffer: &[u8]) -> usize {
+        let (label, start) = Labels::from_buffer(&buffer);
         self.qname = label;
-        start += 1; // null terminator
-
         let rr_type = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
         let class = u16::from_be_bytes([buffer[start + 2], buffer[start + 3]]);
-
         // instead of transmute lets use try from fresh fresh implemenation
         self.q_type = RRType::try_from(rr_type).expect("Unknown RR type: {rr_type}");
         self.class = RRClass::try_from(class).expect("Unknown class: {class}");
+        return start + 4;
     }
 }
 
@@ -97,7 +83,6 @@ mod tests {
         // setup
         let strings = ["www"];
         let mut question = Question::default();
-
         for item in strings {
             question.add_name(String::from(item));
         }
@@ -114,17 +99,14 @@ mod tests {
         // setup
         let strings = ["www", "google", "com"];
         let mut question = Question::default();
-
         for item in strings {
             question.add_name(String::from(item));
         }
         // excercise
         let result = question.to_buffer();
-
         // verification
-        let mut decoded = Question::new(question.get_num());
-        decoded.from_buffer(&result);
-
+        let mut decoded = Question::default();
+        let _ = decoded.from_buffer(&result);
         assert_eq!(question, decoded);
     }
 }

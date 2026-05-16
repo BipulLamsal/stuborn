@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::Cursor;
 /// into represnts the postion (offset bit index) of the buffer
 /// i am thinking ths way its easier to get the correct position and also parsing this would be
@@ -42,6 +43,18 @@ pub enum MessageHeaderType {
     ArCount(u16) = 80,
 }
 
+impl MessageHeaderType {
+    pub fn get_count(&self) -> u16 {
+        match self {
+            &MessageHeaderType::QdCount(v)
+            | &MessageHeaderType::AnCount(v)
+            | &MessageHeaderType::NsCount(v)
+            | &MessageHeaderType::ArCount(v) => v,
+            _ => 0,
+        }
+    }
+}
+
 impl From<MessageHeaderType> for usize {
     fn from(value: MessageHeaderType) -> Self {
         // Saftey : repr of MessageHeaderType is u8 so we are typecasting to u8 first and then usize
@@ -54,9 +67,54 @@ impl From<MessageHeaderType> for usize {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct MessageHeader {
     cursor: Cursor<[u8; 12]>,
+}
+
+impl fmt::Debug for MessageHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut id = MessageHeaderType::Id(0);
+        let mut qr = MessageHeaderType::Qr(false);
+        let mut opcode = MessageHeaderType::OpCode(Opcode::Query);
+        let mut aa = MessageHeaderType::AA(false);
+        let mut tc = MessageHeaderType::TC(false);
+        let mut rd = MessageHeaderType::RD(false);
+        let mut ra = MessageHeaderType::RA(false);
+        let mut rcode = MessageHeaderType::Rcode(ResponseCode::NoErr);
+        let mut qd = MessageHeaderType::QdCount(0);
+        let mut an = MessageHeaderType::AnCount(0);
+        let mut ns = MessageHeaderType::NsCount(0);
+        let mut ar = MessageHeaderType::ArCount(0);
+
+        self.get_message_header_value(&mut id);
+        self.get_message_header_value(&mut qr);
+        self.get_message_header_value(&mut opcode);
+        self.get_message_header_value(&mut aa);
+        self.get_message_header_value(&mut tc);
+        self.get_message_header_value(&mut rd);
+        self.get_message_header_value(&mut ra);
+        self.get_message_header_value(&mut rcode);
+        self.get_message_header_value(&mut qd);
+        self.get_message_header_value(&mut an);
+        self.get_message_header_value(&mut ns);
+        self.get_message_header_value(&mut ar);
+
+        f.debug_struct("MessageHeader")
+            .field("id", &format!("0x{:04X}", id.get_count()))
+            .field("qr", &matches!(qr, MessageHeaderType::Qr(true)))
+            .field("opcode", &opcode)
+            .field("aa", &matches!(aa, MessageHeaderType::AA(true)))
+            .field("tc", &matches!(tc, MessageHeaderType::TC(true)))
+            .field("rd", &matches!(rd, MessageHeaderType::RD(true)))
+            .field("ra", &matches!(ra, MessageHeaderType::RA(true)))
+            .field("rcode", &rcode)
+            .field("qdcount", &qd.get_count())
+            .field("ancount", &an.get_count())
+            .field("nscount", &ns.get_count())
+            .field("arcount", &ar.get_count())
+            .finish()
+    }
 }
 
 impl MessageHeader {
@@ -134,7 +192,7 @@ impl MessageHeader {
         (slice[start] >> (7 - rem)) & 1 == 1
     }
 
-    fn get_message_header_value(&self, message_type: &mut MessageHeaderType) {
+    pub fn get_message_header_value(&self, message_type: &mut MessageHeaderType) {
         let bit_idx: usize = (*message_type).into();
         let pos = bit_idx / 8;
         let rem = bit_idx % 8;
