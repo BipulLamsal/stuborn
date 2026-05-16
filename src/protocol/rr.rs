@@ -12,7 +12,7 @@ pub struct RRRecord {
     /// length
     rdlen: u16,
     ///  variable length string that describes the resource
-    rdata: String,
+    rdata: Vec<u8>,
 }
 
 impl Default for RRRecord {
@@ -23,7 +23,7 @@ impl Default for RRRecord {
             rr_class: RRClass::IN,
             ttl: 0,
             rdlen: 0,
-            rdata: String::new(),
+            rdata: Vec::new(),
         }
     }
 }
@@ -51,7 +51,7 @@ impl RRRecord {
         let rdlen = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
         pos += 2;
 
-        let rdata = String::from_utf8_lossy(&buffer[pos..pos + rdlen as usize]).to_string();
+        let rdata = Vec::from(&buffer[pos..pos + rdlen as usize]);
         pos += rdlen as usize;
 
         (
@@ -74,7 +74,7 @@ impl RRRecord {
         vec.extend_from_slice(&(self.rr_class as u16).to_be_bytes());
         vec.extend_from_slice(&self.ttl.to_be_bytes());
         vec.extend_from_slice(&self.rdlen.to_be_bytes());
-        vec.extend_from_slice(self.rdata.as_bytes());
+        vec.extend_from_slice(&self.rdata);
         vec
     }
 }
