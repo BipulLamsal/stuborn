@@ -3,7 +3,7 @@ use crate::protocol::{
         header::{MessageHeader, MessageHeaderType},
         question::Question,
     },
-    rr::RRFormat,
+    rr::{Labels, RRFormat},
 };
 
 /*
@@ -49,6 +49,13 @@ impl DNSpacket {
     pub fn from_buffer(buffer: &[u8]) -> Self {
         let mut header_buffer = [0u8; 12];
 
+        let pointer_compression_callback = |start: usize| {
+            let labels = Labels::from_buffer(&buffer[start..], |_: usize| {
+                return None;
+            });
+            return Some(labels.0);
+        };
+
         header_buffer.copy_from_slice(&buffer[0..12]);
         let mut header = MessageHeader::default();
         header.from(header_buffer);
@@ -69,13 +76,13 @@ impl DNSpacket {
         start += question.from_buffer(&buffer[12..]);
 
         let mut answer = RRFormat::new(an.get_count());
-        start += answer.from_buffer(&buffer[start..]);
+        start += answer.from_buffer(&buffer[start..], pointer_compression_callback);
 
         let mut authority = RRFormat::new(ns.get_count());
-        start += authority.from_buffer(&buffer[start..]);
+        start += authority.from_buffer(&buffer[start..], pointer_compression_callback);
 
         let mut additional = RRFormat::new(ar.get_count());
-        let _ = additional.from_buffer(&buffer[start..]);
+        let _ = additional.from_buffer(&buffer[start..], pointer_compression_callback);
 
         Self {
             header,

@@ -16,7 +16,8 @@ fn main() {
     let header_buffer = header.to_buffer();
 
     let mut question = Question::default();
-    question.add_name(String::from("google"));
+    question.add_name(String::from("www"));
+    question.add_name(String::from("yahoo"));
     question.add_name(String::from("com"));
     let question_buffer = question.to_buffer();
 

@@ -29,8 +29,11 @@ impl Default for RRRecord {
 }
 
 impl RRRecord {
-    pub fn from_buffer(buffer: &[u8]) -> (Self, usize) {
-        let (labels, mut pos) = Labels::from_buffer(buffer);
+    pub fn from_buffer<F>(buffer: &[u8], cb: F) -> (Self, usize)
+    where
+        F: Fn(usize) -> Option<Labels>,
+    {
+        let (labels, mut pos) = Labels::from_buffer(buffer, cb);
 
         let rr_type = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
         let rr_type = RRType::try_from(rr_type).unwrap();
@@ -50,7 +53,11 @@ impl RRRecord {
 
         let rdlen = u16::from_be_bytes([buffer[pos], buffer[pos + 1]]);
         pos += 2;
+        println!("intial pos: {:?}", pos);
 
+        println!("the length is : {:?}", rdlen);
+
+        println!("final pos: {:?}", pos + rdlen as usize);
         let rdata = Vec::from(&buffer[pos..pos + rdlen as usize]);
         pos += rdlen as usize;
 
@@ -92,10 +99,13 @@ impl RRFormat {
         }
     }
 
-    pub fn from_buffer(&mut self, buffer: &[u8]) -> usize {
+    pub fn from_buffer<F>(&mut self, buffer: &[u8], cb: F) -> usize
+    where
+        F: Fn(usize) -> Option<Labels>,
+    {
         let mut pos = 0;
         for _ in 0..self.records.capacity() {
-            let (record, next) = RRRecord::from_buffer(&buffer[pos..]);
+            let (record, next) = RRRecord::from_buffer(&buffer[pos..], &cb);
             self.records.push(record);
             pos += next;
         }
@@ -209,7 +219,10 @@ impl Labels {
         self.label.len()
     }
 
-    pub fn from_buffer(buffer: &[u8]) -> (Self, usize) {
+    pub fn from_buffer<F>(buffer: &[u8], cb: F) -> (Self, usize)
+    where
+        F: Fn(usize) -> Option<Labels>,
+    {
         let mut labels = Labels::default();
         let mut start = 0_usize;
 
@@ -222,6 +235,11 @@ impl Labels {
             }
 
             if num & 0xC0 == 0xC0 {
+                // this is pointer compression
+                let pos: usize = buffer[start + 1] as usize;
+                if let Some(cb_labels) = cb(pos) {
+                    labels = cb_labels;
+                }
                 start += 2;
                 break;
             }
@@ -251,8 +269,8 @@ mod tests {
             rr_type: RRType::A,
             rr_class: RRClass::IN,
             ttl: 300,
-            rdlen: 9,
-            rdata: "127.0.0.1".to_string(),
+            rdlen: 4,
+            rdata: vec![127, 0, 0, 1],
         }
     }
 
@@ -283,9 +301,9 @@ mod tests {
         // ttl: 300
         assert_eq!(&buffer[20..24], &[0, 0, 1, 44]);
         // rdlen: 9
-        assert_eq!(&buffer[24..26], &[0, 9]);
+        assert_eq!(&buffer[24..26], &[0, 4]);
         // rdata
-        assert_eq!(&buffer[26..], b"127.0.0.1");
+        assert_eq!(&buffer[26..30], [127, 0, 0, 1]);
     }
 
     #[test]
@@ -293,7 +311,7 @@ mod tests {
         let original = make_rr_record();
         let buffer = original.to_buffer();
 
-        let (decoded, _) = RRRecord::from_buffer(&buffer);
+        let (decoded, _) = RRRecord::from_buffer(&buffer, |_: usize| None);
 
         assert_eq!(decoded, original);
     }
@@ -304,7 +322,7 @@ mod tests {
         let buffer = original.to_buffer();
 
         let mut decoded = RRFormat::new(2);
-        decoded.from_buffer(&buffer);
+        decoded.from_buffer(&buffer, |_: usize| None);
 
         assert_eq!(decoded.records.len(), 2);
         assert_eq!(decoded.records[0], original.records[0]);
@@ -315,7 +333,7 @@ mod tests {
     fn test_labels_pointer_compression_skipped() {
         // pointer bytes 0xC0 0x0C should consume exactly 2 bytes and stop
         let buffer: &[u8] = &[0xC0, 0x0C, 0x00, 0x01];
-        let (labels, consumed) = Labels::from_buffer(buffer);
+        let (labels, consumed) = Labels::from_buffer(buffer, |_: usize| None);
         assert_eq!(consumed, 2);
         assert_eq!(labels.get_len(), 0); // no labels parsed, just pointer
     }

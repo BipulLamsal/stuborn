@@ -49,7 +49,8 @@ impl MessageHeaderType {
             &MessageHeaderType::QdCount(v)
             | &MessageHeaderType::AnCount(v)
             | &MessageHeaderType::NsCount(v)
-            | &MessageHeaderType::ArCount(v) => v,
+            | &MessageHeaderType::ArCount(v)
+            | &MessageHeaderType::Id(v) => v,
             _ => 0,
         }
     }
@@ -101,7 +102,7 @@ impl fmt::Debug for MessageHeader {
         self.get_message_header_value(&mut ar);
 
         f.debug_struct("MessageHeader")
-            .field("id", &format!("0x{:04X}", id.get_count()))
+            .field("id", &format!("{}", id.get_count()))
             .field("qr", &matches!(qr, MessageHeaderType::Qr(true)))
             .field("opcode", &opcode)
             .field("aa", &matches!(aa, MessageHeaderType::AA(true)))

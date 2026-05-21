@@ -63,7 +63,7 @@ impl Question {
 
     /// Returns the position after to the next item to start consuming the buffer
     pub fn from_buffer(&mut self, buffer: &[u8]) -> usize {
-        let (label, start) = Labels::from_buffer(&buffer);
+        let (label, start) = Labels::from_buffer(&buffer, |_: usize| None);
         self.qname = label;
         let rr_type = u16::from_be_bytes([buffer[start], buffer[start + 1]]);
         let class = u16::from_be_bytes([buffer[start + 2], buffer[start + 3]]);
